@@ -1,3 +1,4 @@
+// eslint-disable-next-line n8n-nodes-base/node-filename-against-convention
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -10,8 +11,8 @@ import { Jimp } from 'jimp';
 export class Comfyui implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ComfyUI',
-		name: 'comfyui',
-		icon: 'file:comfyui.svg',
+		name: 'comfy',
+		icon: 'file:comfy.svg',
 		group: ['transform'],
 		version: 1,
 		description: 'Execute ComfyUI workflows',
@@ -24,8 +25,8 @@ export class Comfyui implements INodeType {
 				required: true,
 			},
 		],
-		inputs: `={{ $string }}`,
-		outputs: `={{ $string }}`,
+		inputs: ['main'],
+		outputs: ['main'],
 		properties: [
 			{
 				displayName: 'Workflow JSON',
@@ -37,43 +38,6 @@ export class Comfyui implements INodeType {
 				default: '',
 				required: true,
 				description: 'The ComfyUI workflow in JSON format',
-			},
-			{
-				displayName: 'Output Format',
-				name: 'outputFormat',
-				type: 'options',
-				options: [
-					{
-						name: 'JPEG',
-						value: 'jpeg',
-					},
-					{
-						name: 'PNG',
-						value: 'png',
-					},
-					{
-						name: 'VIDEO',
-						value: 'mp4',
-					}
-				],
-				default: 'jpeg',
-				description: 'The format of the output images',
-			},
-			{
-				displayName: 'JPEG Quality',
-				name: 'jpegQuality',
-				type: 'number',
-				typeOptions: {
-					minValue: 1,
-					maxValue: 100
-				},
-				default: 80,
-				description: 'Quality of JPEG output (1-100)',
-				displayOptions: {
-					show: {
-						outputFormat: ['jpeg'],
-					},
-				},
 			},
 			{
 				displayName: 'Timeout',
@@ -89,11 +53,6 @@ export class Comfyui implements INodeType {
 		const credentials = await this.getCredentials('comfyUIApi');
 		const workflow = this.getNodeParameter('workflow', 0) as string;
 		const timeout = this.getNodeParameter('timeout', 0) as number;
-		const outputFormat = this.getNodeParameter('outputFormat', 0) as string;
-		let jpegQuality: number
-		if (outputFormat === 'jpeg') {
-			jpegQuality = this.getNodeParameter('jpegQuality', 0) as number;
-		}
 
 		const apiUrl = credentials.apiUrl as string;
 		const apiKey = credentials.apiKey as string;
@@ -155,6 +114,7 @@ export class Comfyui implements INodeType {
 				});
 
 				const promptResult = history[promptId];
+
 				if (!promptResult) {
 					console.log('[ComfyUI] Prompt not found in history');
 					continue;
@@ -176,103 +136,122 @@ export class Comfyui implements INodeType {
 						throw new NodeApiError(this.getNode(), { message: '[ComfyUI] No outputs found in workflow result' });
 					}
 
-					const outputs = await Promise.all(
-						Object.values(promptResult.outputs)
-							.flatMap((nodeOutput: any) => nodeOutput.images || []) // assuming videos also listed under `images`, adjust if needed
-							.filter((file: any) => file.type === 'output' || file.type === 'temp')
-							.map(async (file: any) => {
-								const isVideo = file.filename.endsWith('.mp4') || file.filename.endsWith('.webm') || outputFormat === 'mp4'; // extend as needed
-								console.log(`[ComfyUI] Downloading ${file.type} file:`, file.filename);
-
-								const fileUrl = `${apiUrl}/view?filename=${file.filename}&subfolder=${file.subfolder || ''}&type=${file.type || ''}`;
-
-								try {
-									const fileData = await this.helpers.request({
-										method: 'GET',
-										url: fileUrl,
-										encoding: null,
-										headers,
-									});
-
-									let item: INodeExecutionData;
-
-									if (isVideo) {
-										const videoBuffer = Buffer.from(fileData);
-										const base64 = videoBuffer.toString('base64');
-										const ext = file.filename.endsWith('.webm') ? 'webm' : 'mp4';
-										const mime = ext === 'mp4' ? 'video/mp4' : 'video/webm';
-
-										item = {
-											json: {
-												filename: file.filename,
-												type: file.type,
-												subfolder: file.subfolder || '',
-												data: base64,
-											},
-											binary: {
-												data: {
-													fileName: file.filename,
-													data: base64,
-													fileType: 'video',
-													fileSize: Math.round(videoBuffer.length / 1024 * 10) / 10 + " kB",
-													fileExtension: ext,
-													mimeType: mime,
-												}
-											}
-										};
-
-									} else {
-										const image = await Jimp.read(Buffer.from(fileData, 'base64'));
-										let outputBuffer: Buffer;
-										if (outputFormat === 'jpeg') {
-											outputBuffer = await image.getBuffer("image/jpeg", { quality: jpegQuality });
-										} else {
-											outputBuffer = await image.getBuffer(`image/png`);
-										}
-										const outputBase64 = outputBuffer.toString('base64');
-
-										item = {
-											json: {
-												filename: file.filename,
-												type: file.type,
-												subfolder: file.subfolder || '',
-												data: outputBase64,
-											},
-											binary: {
-												data: {
-													fileName: file.filename,
-													data: outputBase64,
-													fileType: 'image',
-													fileSize: Math.round(outputBuffer.length / 1024 * 10) / 10 + " kB",
-													fileExtension: outputFormat,
-													mimeType: `image/${outputFormat}`,
-												}
-											}
-										};
+					const filesToProcess = Object.values(promptResult.outputs).flatMap((nodeOutput: any) => {
+									// Combine images and gifs arrays for each nodeOutput
+									const files = [];
+									if (nodeOutput.images) {
+											files.push(...nodeOutput.images);
 									}
+									if (nodeOutput.gifs) {
+											files.push(...nodeOutput.gifs);
+									}
+									return files;
+							}).filter((file) => file.type === 'output' || file.type === 'temp');
 
-									return item;
+    			console.log("Files to process after initial filtering:", filesToProcess); // See what files are actually being processed
 
-								} catch (error) {
-									console.error(`[ComfyUI] Failed to download file ${file.filename}:`, error);
-									return {
-										json: {
-											filename: file.filename,
-											type: file.type,
-											subfolder: file.subfolder || '',
-											error: error.message,
-										},
-									};
-								}
-							})
+    			const outputs = await Promise.all(
+        				filesToProcess.map(async (file) => {
+
+									 	console.log("FILE: ", file);
+
+										const isVideo = file.filename.endsWith('.mp4') || file.filename.endsWith('.webm');
+										console.log(`[ComfyUI] Downloading ${file.type} file:`, file.filename);
+
+										const fileUrl = `${apiUrl}/view?filename=${file.filename}&subfolder=${file.subfolder || ''}&type=${file.type || ''}`;
+
+										try {
+												const fileData = await this.helpers.request({
+														method: 'GET',
+														url: fileUrl,
+														encoding: null, // Get data as a Buffer
+														headers,
+												});
+
+												let item: INodeExecutionData;
+
+												if (isVideo) {
+														const videoBuffer = Buffer.from(fileData);
+														const base64 = videoBuffer.toString('base64');
+														const ext = file.filename.endsWith('.webm') ? 'webm' : 'mp4';
+														const mime = ext === 'mp4' ? 'video/mp4' : 'video/webm';
+
+														item = {
+																json: {
+																		filename: file.filename,
+																		type: file.type,
+																		subfolder: file.subfolder || '',
+																		data: base64,
+																},
+																binary: {
+																		data: {
+																				fileName: file.filename,
+																				data: base64,
+																				fileType: 'video',
+																				fileSize: Math.round(videoBuffer.length / 1024 * 10) / 10 + " kB",
+																				fileExtension: ext,
+																				mimeType: mime,
+																		}
+																}
+														};
+												} else {
+														// Ensure Jimp is correctly imported and available
+														const image = await Jimp.read(fileData);
+														const ext = file.filename.endsWith('.jpeg') ? 'jpeg' : 'png';
+														const mime = ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+
+														let outputBuffer;
+														if (ext === 'jpeg') {
+																outputBuffer = await image.getBuffer("image/jpeg", { quality: 80 });
+														} else {
+																outputBuffer = await image.getBuffer(`image/png`);
+														}
+														const outputBase64 = outputBuffer.toString('base64');
+
+														item = {
+																json: {
+																		filename: file.filename,
+																		type: file.type,
+																		subfolder: file.subfolder || '',
+																		data: outputBase64,
+																},
+																binary: {
+																		data: {
+																				fileName: file.filename,
+																				data: outputBase64,
+																				fileType: 'image',
+																				fileExtension: ext,
+																				mimeType: mime,
+																				fileSize: Math.round(outputBuffer.length / 1024 * 10) / 10 + " kB",
+																		}
+																}
+														};
+												}
+
+												return item;
+
+										} catch (error: any) {
+												console.error(`[ComfyUI] Failed to download file ${file.filename}:`, error);
+												return {
+														json: {
+																filename: file.filename,
+																type: file.type,
+																subfolder: file.subfolder || '',
+																error: error.message,
+																fileUrl: fileUrl,
+														},
+												};
+										}
+								})
 						);
 
-					console.log('[ComfyUI] All images downloaded successfully');
-					return [outputs];
+						console.log(`Outputs Length: ${outputs.length}`);
+						console.log('[ComfyUI] All Files downloaded successfully!');
+						return [outputs];
 				}
 			}
 			throw new NodeApiError(this.getNode(), { message: `Execution timeout after ${timeout} minutes` });
-		} catch (error) {
+		} catch (error: any) {
 			console.error('[ComfyUI] Execution error:', error);
 			throw new NodeApiError(this.getNode(), { message: `ComfyUI API Error: ${error.message}` });
 		}

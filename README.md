@@ -58,22 +58,6 @@ The node includes comprehensive error handling for:
 - Execution failures
 - Timeout conditions (default 20 minutes)
 
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Test
-npm run test
-
-# Lint
-npm run lint
-```
-
 ## License
 
 [MIT](LICENSE.md)

@@ -7,7 +7,7 @@ import {
 export class ComfyUIApi implements ICredentialType {
 	name = 'comfyUIApi';
 	displayName = 'ComfyUI API';
-	documentationUrl = 'https://github.com/comfyanonymous/ComfyUI';
+	documentationUrl = 'https://github.com/IA-Entertainment-git-organization/n8n-nodes-comfyuinew';
 	properties: INodeProperties[] = [
 		{
 			displayName: 'API URL',
