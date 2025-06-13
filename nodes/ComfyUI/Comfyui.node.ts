@@ -50,9 +50,9 @@ export class Comfyui implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+
+		const items = this.getInputData();
 		const credentials = await this.getCredentials('comfyUIApi');
-		const workflow = this.getNodeParameter('workflow', 0) as string;
-		const timeout = this.getNodeParameter('timeout', 0) as number;
 
 		const apiUrl = credentials.apiUrl as string;
 		const apiKey = credentials.apiKey as string;
@@ -68,10 +68,30 @@ export class Comfyui implements INodeType {
 			headers['Authorization'] = `Bearer ${apiKey}`;
 		}
 
+		let returnData: any = [];
+
+		for (let i = 0; i < items.length; i++) {
+				const workflow = this.getNodeParameter('workflow', i) as string;
+				const timeout = this.getNodeParameter('timeout', i) as number;
+
+				console.log("**************************************************************");
+				console.log("[WORKFLOW] - ", workflow);
+				console.log("**************************************************************");
+
+				const newData = await tryGenerateContentWithComfy(this, apiUrl, headers, workflow, timeout);
+
+				returnData.push(newData);
+		}
+
+		return [returnData];
+	}
+}
+
+ async function tryGenerateContentWithComfy(brain: IExecuteFunctions, apiUrl: string, headers: Record<string, string>, workflow: string, timeout: number) {
 		try {
 			// Check API connection
 			console.log('[ComfyUI] Checking API connection...');
-			await this.helpers.request({
+			await brain.helpers.request({
 				method: 'GET',
 				url: `${apiUrl}/system_stats`,
 				headers,
@@ -80,7 +100,7 @@ export class Comfyui implements INodeType {
 
 			// Queue prompt
 			console.log('[ComfyUI] Queueing prompt...');
-			const response = await this.helpers.request({
+			const response = await brain.helpers.request({
 				method: 'POST',
 				url: `${apiUrl}/prompt`,
 				headers,
@@ -91,7 +111,7 @@ export class Comfyui implements INodeType {
 			});
 
 			if (!response.prompt_id) {
-				throw new NodeApiError(this.getNode(), { message: 'Failed to get prompt ID from ComfyUI' });
+				throw new NodeApiError(brain.getNode(), { message: 'Failed to get prompt ID from ComfyUI' });
 			}
 
 			const promptId = response.prompt_id;
@@ -106,7 +126,7 @@ export class Comfyui implements INodeType {
 				await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 seconds
 				attempts++;
 
-				const history = await this.helpers.request({
+				const history = await brain.helpers.request({
 					method: 'GET',
 					url: `${apiUrl}/history/${promptId}`,
 					headers,
@@ -128,12 +148,12 @@ export class Comfyui implements INodeType {
 					console.log('[ComfyUI] Execution completed');
 
 					if (promptResult.status?.status_str === 'error') {
-						throw new NodeApiError(this.getNode(), { message: '[ComfyUI] Workflow execution failed' });
+						throw new NodeApiError(brain.getNode(), { message: '[ComfyUI] Workflow execution failed' });
 					}
 
 					// Process outputs
 					if (!promptResult.outputs) {
-						throw new NodeApiError(this.getNode(), { message: '[ComfyUI] No outputs found in workflow result' });
+						throw new NodeApiError(brain.getNode(), { message: '[ComfyUI] No outputs found in workflow result' });
 					}
 
 					const filesToProcess = Object.values(promptResult.outputs).flatMap((nodeOutput: any) => {
@@ -161,7 +181,7 @@ export class Comfyui implements INodeType {
 										const fileUrl = `${apiUrl}/view?filename=${file.filename}&subfolder=${file.subfolder || ''}&type=${file.type || ''}`;
 
 										try {
-												const fileData = await this.helpers.request({
+												const fileData = await brain.helpers.request({
 														method: 'GET',
 														url: fileUrl,
 														encoding: null, // Get data as a Buffer
@@ -243,17 +263,16 @@ export class Comfyui implements INodeType {
 												};
 										}
 								})
-						);
+					 );
 
 						console.log(`Outputs Length: ${outputs.length}`);
 						console.log('[ComfyUI] All Files downloaded successfully!');
-						return [outputs];
+						return outputs;
 				}
 			}
-			throw new NodeApiError(this.getNode(), { message: `Execution timeout after ${timeout} minutes` });
+			throw new NodeApiError(brain.getNode(), { message: `Execution timeout after ${timeout} minutes` });
 		} catch (error: any) {
 			console.error('[ComfyUI] Execution error:', error);
-			throw new NodeApiError(this.getNode(), { message: `ComfyUI API Error: ${error.message}` });
+			throw new NodeApiError(brain.getNode(), { message: `ComfyUI API Error: ${error.message}` });
 		}
-	}
-}
+ }
