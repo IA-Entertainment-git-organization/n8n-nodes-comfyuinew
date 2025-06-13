@@ -80,7 +80,7 @@ export class Comfyui implements INodeType {
 
 				const newData = await tryGenerateContentWithComfy(this, apiUrl, headers, workflow, timeout);
 
-				returnData.push(newData);
+				newData.map(item => returnData.push(item));
 		}
 
 		console.log("**************************************************************");
