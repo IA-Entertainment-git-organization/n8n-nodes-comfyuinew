@@ -83,7 +83,11 @@ export class Comfyui implements INodeType {
 				returnData.push(newData);
 		}
 
-		return [returnData];
+		console.log("**************************************************************");
+		console.log("[RETURN DATA] - ", returnData);
+		console.log("**************************************************************");
+
+		return returnData;
 	}
 }
 
