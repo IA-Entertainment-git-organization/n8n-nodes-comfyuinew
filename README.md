@@ -40,6 +40,10 @@ The node outputs an array of generated images with:
 - `filename`: Name of the generated image file
 - `subfolder`: Subfolder path if any
 - `data`: Base64 encoded image data
+- `fileSize`: Size of the File kb
+- `fileType`: video | image
+- `fileExtension`: mp4 | jpeg | png
+- `fileUrl`: File Path
 
 ## Usage Example
 
@@ -48,7 +52,7 @@ The node outputs an array of generated images with:
 3. Add the ComfyUI node
 4. Paste your workflow JSON
 5. Configure the API URL
-6. Execute and retrieve generated images
+6. Execute and retrieve generated images or video
 
 ## Error Handling
 
