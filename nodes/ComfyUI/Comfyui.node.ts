@@ -87,7 +87,7 @@ export class Comfyui implements INodeType {
 		console.log("[RETURN DATA] - ", returnData);
 		console.log("**************************************************************");
 
-		return returnData;
+		return [returnData];
 	}
 }
 
@@ -205,6 +205,7 @@ export class Comfyui implements INodeType {
 																		filename: file.filename,
 																		type: file.type,
 																		subfolder: file.subfolder || '',
+																		fileUrl: fileUrl,
 																		data: base64,
 																},
 																binary: {
@@ -237,6 +238,7 @@ export class Comfyui implements INodeType {
 																		filename: file.filename,
 																		type: file.type,
 																		subfolder: file.subfolder || '',
+																		fileUrl: fileUrl,
 																		data: outputBase64,
 																},
 																binary: {
