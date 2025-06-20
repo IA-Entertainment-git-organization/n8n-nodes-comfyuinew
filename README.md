@@ -43,7 +43,8 @@ The node outputs an array of generated images with:
 - `fileSize`: Size of the File kb
 - `fileType`: video | image
 - `fileExtension`: mp4 | jpeg | png
-- `fileUrl`: File Path
+- `fileUrl`: ComfyUI Url of output file
+- `filePath`: Local path of output file
 
 ## Usage Example
 

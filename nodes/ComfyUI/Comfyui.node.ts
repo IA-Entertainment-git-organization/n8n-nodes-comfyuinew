@@ -38,14 +38,7 @@ export class Comfyui implements INodeType {
 				default: '',
 				required: true,
 				description: 'The ComfyUI workflow in JSON format',
-			},
-			{
-				displayName: 'Timeout',
-				name: 'timeout',
-				type: 'number',
-				default: 30,
-				description: 'Maximum time in minutes to wait for workflow completion',
-			},
+			}
 		],
 	};
 
@@ -72,26 +65,20 @@ export class Comfyui implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 				const workflow = this.getNodeParameter('workflow', i) as string;
-				const timeout = this.getNodeParameter('timeout', i) as number;
 
-				console.log("**************************************************************");
-				console.log("[WORKFLOW] - ", workflow);
-				console.log("**************************************************************");
-
-				const newData = await tryGenerateContentWithComfy(this, apiUrl, headers, workflow, timeout);
+				const newData = await tryGenerateContentWithComfy(this, apiUrl, headers, workflow);
 
 				newData.map(item => returnData.push(item));
 		}
 
 		console.log("**************************************************************");
-		console.log("[RETURN DATA] - ", returnData);
 		console.log("**************************************************************");
 
 		return [returnData];
 	}
 }
 
- async function tryGenerateContentWithComfy(brain: IExecuteFunctions, apiUrl: string, headers: Record<string, string>, workflow: string, timeout: number) {
+ async function tryGenerateContentWithComfy(brain: IExecuteFunctions, apiUrl: string, headers: Record<string, string>, workflow: string) {
 		try {
 			// Check API connection
 			console.log('[ComfyUI] Checking API connection...');
@@ -123,12 +110,13 @@ export class Comfyui implements INodeType {
 
 			// Poll for completion
 			let attempts = 0;
-			const maxAttempts = 60 * timeout; // Convert minutes to seconds
+			let maxAttempts = 1;
 			await new Promise(resolve => setTimeout(resolve, 5000));
 			while (attempts < maxAttempts) {
-				console.log(`[ComfyUI] Checking execution status (attempt ${attempts + 1}/${maxAttempts})...`);
+				console.log(`[ComfyUI] Checking execution status (attempt: ${attempts + 1})...`);
 				await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 seconds
 				attempts++;
+				maxAttempts += 1;
 
 				const history = await brain.helpers.request({
 					method: 'GET',
@@ -161,28 +149,25 @@ export class Comfyui implements INodeType {
 					}
 
 					const filesToProcess = Object.values(promptResult.outputs).flatMap((nodeOutput: any) => {
-									// Combine images and gifs arrays for each nodeOutput
-									const files = [];
-									if (nodeOutput.images) {
-											files.push(...nodeOutput.images);
-									}
-									if (nodeOutput.gifs) {
-											files.push(...nodeOutput.gifs);
-									}
-									return files;
-							}).filter((file) => file.type === 'output' || file.type === 'temp');
-
-    			console.log("Files to process after initial filtering:", filesToProcess); // See what files are actually being processed
+								// Combine images and gifs arrays for each nodeOutput
+								const files = [];
+								if (nodeOutput.images) {
+										files.push(...nodeOutput.images);
+								}
+								if (nodeOutput.gifs) {
+										files.push(...nodeOutput.gifs);
+								}
+								return files;
+						}).filter((file) => file.type === 'output' || file.type === 'temp');
 
     			const outputs = await Promise.all(
         				filesToProcess.map(async (file) => {
-
-									 	console.log("FILE: ", file);
 
 										const isVideo = file.filename.endsWith('.mp4') || file.filename.endsWith('.webm');
 										console.log(`[ComfyUI] Downloading ${file.type} file:`, file.filename);
 
 										const fileUrl = `${apiUrl}/view?filename=${file.filename}&subfolder=${file.subfolder || ''}&type=${file.type || ''}`;
+										console.log("fileUrl: ", fileUrl);
 
 										try {
 												const fileData = await brain.helpers.request({
@@ -206,6 +191,7 @@ export class Comfyui implements INodeType {
 																		type: file.type,
 																		subfolder: file.subfolder || '',
 																		fileUrl: fileUrl,
+																		filePath: file.fullpath,
 																		data: base64,
 																},
 																binary: {
@@ -239,6 +225,7 @@ export class Comfyui implements INodeType {
 																		type: file.type,
 																		subfolder: file.subfolder || '',
 																		fileUrl: fileUrl,
+																		filePath: file.fullpath,
 																		data: outputBase64,
 																},
 																binary: {
@@ -271,12 +258,11 @@ export class Comfyui implements INodeType {
 								})
 					 );
 
-						console.log(`Outputs Length: ${outputs.length}`);
 						console.log('[ComfyUI] All Files downloaded successfully!');
 						return outputs;
 				}
 			}
-			throw new NodeApiError(brain.getNode(), { message: `Execution timeout after ${timeout} minutes` });
+			throw new NodeApiError(brain.getNode(), { message: `Execution timeout` });
 		} catch (error: any) {
 			console.error('[ComfyUI] Execution error:', error);
 			throw new NodeApiError(brain.getNode(), { message: `ComfyUI API Error: ${error.message}` });
