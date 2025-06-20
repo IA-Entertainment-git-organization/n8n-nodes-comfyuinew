@@ -8,7 +8,6 @@
 - Automatic image/video retrieval from workflow outputs
 - Progress monitoring and error handling
 - Support for API key authentication
-- Configurable timeout settings
 
 ## Prerequisites
 
@@ -26,7 +25,7 @@ npm install n8n-nodes-comfyuinew
 
 ### ComfyUI Node
 
-This node allows you to execute ComfyUI workflows and retrieve generated images.
+This node allows you to execute ComfyUI workflows and retrieve generated images and videos.
 
 #### Settings
 
